@@ -13,9 +13,9 @@ var dataJson = []
 
 var tmads = 0
 
-var setStatus = (status) => {
+var setStatus = (status, l) => {
   $('#appStatus').text(status)
-  console.log('#', status)
+  console.log('#', status, 'l'+l)
 }
 
 var apiQuery = async (method, params = {}) => {
@@ -45,13 +45,15 @@ var apiQuery = async (method, params = {}) => {
 }
 
 var parseSocAccounts = async () => {
-  setStatus('получаем социальные аккаунты')
+  setStatus('получаем социальные аккаунты', new Error().lineNumber)
   let l = 'парсим социальные аккаунты: '
   let accounts = await apiQuery('get-accounts')
   if (!accounts) {
     console.warn('parseSocAccounts error')
     return (false)
   }
+
+  var adAccountsPromises = []
 
   for (let i in accounts) {
     if (i !== 'requestsLeft') {
@@ -68,37 +70,44 @@ var parseSocAccounts = async () => {
 
         let ii = dataJson.push(account) - 1
 
-        setStatus(l + account.name)
+        setStatus(l + account.name, new Error().lineNumber)
 
         if (!sync) {
-          parseAdAccounts(account)
+          adAccountsPromises.push(parseAdAccounts(account))
         }
       }
     }
   }
-  setStatus('получили все социальные аккаунты')
+
+  if (!sync) {
+    await Promise.all(adAccountsPromises)
+  }
+
+  setStatus('получили все социальные аккаунты', new Error().lineNumber)
   return (true)
 }
 
 var parseAdAccounts = async (account) => {
-  setStatus('получаем рекламные аккаунты (' + account.name + ')')
+  setStatus('получаем рекламные аккаунты (' + account.name + ')', new Error().lineNumber)
   let l = 'парсим рекламные аккаунты: '
   let adAccounts = await apiQuery('get-adaccounts', { account: account.id })
   if (!adAccounts) {
     console.warn('parseAdAccounts error')
     return (false)
   }
-  if (adAccounts.error) {
+  if ((adAccounts.error || false) || (!(adAccounts.data || false))) {
     $('#log')[0].value += 'account: ' + account.id + ' (' + account.name + '): '+ adAccounts.error.message + '\n'
     console.warn('account: ' + account.id + ' (' + account.name + '): '+ adAccounts.error.message)
     if (!sync) {
       pushRow(account, null, null)
     }
+    return (null)
   } else {
     if (adAccounts.data.length == 0) {
-      if (!sync) {
+      if (!sync) {  
         pushRow(account, null, null)
       }
+      return (null)
     } else {
       for (let rAdAccount of adAccounts.data) {
         let adAccount = {
@@ -134,14 +143,14 @@ var parseAdAccounts = async (account) => {
           ads: []
         }
         account.adAcs.push(adAccount)
-        setStatus(l + adAccount.name + ' (' + account.name + ')')
-        if (!sync) {
-          parseAds(account, adAccount)
-        }
+        setStatus(l + adAccount.name + ' (' + account.name + ')', new Error().lineNumber)
+        //if (!sync) {
+        //  parseAds(account, adAccount)
+        //}
       }
     }
   }
-  setStatus('получили рекламные аккаунты')
+  setStatus('получили рекламные аккаунты', new Error().lineNumber)
   return (true)
 }
 
@@ -149,12 +158,12 @@ var runParserAdAccounts = async () => {
   for (let account of dataJson) {
     await parseAdAccounts(account)
   }
-  setStatus('получили все рекламные аккаунты')
+  setStatus('получили все рекламные аккаунты', new Error().lineNumber)
   return (true)
 }
 
 var parseAds = async (account, adAccount) => {
-  setStatus('получаем объявления (' + account.name + ', ' + adAccount.name + ')')
+  setStatus('получаем объявления (' + account.name + ', ' + adAccount.name + ')', new Error().lineNumber)
   let l = 'парсим объявления (' + account.name + ', ' + adAccount.name + '): '
   let params = {
     account: account.id,
@@ -167,7 +176,7 @@ var parseAds = async (account, adAccount) => {
   let campaigns = {}
 
   params.mode = 'adsets'
-  setStatus(l + params.mode)
+  setStatus(l + params.mode, new Error().lineNumber)
   let rAdsets = await apiQuery('get-statistics', params)
 
   if ((rAdsets.data) && (rAdsets.data[0]) && (rAdsets.data[0].adsets)) {
@@ -180,7 +189,7 @@ var parseAds = async (account, adAccount) => {
   }
 
   params.mode = 'campaigns'
-  setStatus(l + params.mode)
+  setStatus(l + params.mode, new Error().lineNumber)
   let rCampaigns = await apiQuery('get-statistics', params)
 
   if ((rCampaigns.data) && (rCampaigns.data[0]) && (rCampaigns.data[0].campaigns)) {
@@ -212,7 +221,7 @@ var parseAds = async (account, adAccount) => {
     }
   }
 
-  tmads += ads.data[0].ads.data.length
+  //tmads += ads.data[0].ads.data.length
 
   console_link = 'https://fbtool.pro/console?id=' + account.id + '&ad_account_id=' + ads.data[0].id
 
@@ -263,37 +272,46 @@ var parseAds = async (account, adAccount) => {
 
     adAccount.ads.push(ad)
 
-    setStatus(l + ad.name)
+    setStatus(l + ad.name, new Error().lineNumber)
 
-    tmads -= 1
+    //tmads -= 1
 
     if (!sync) {
-      if (tmads <= 0) {
-        setStatus('обновлено')
-      }
+      /*if (tmads <= 0) {
+        setStatus('обновлено', new Error().lineNumber)
+      }*/
       pushRow(account, adAccount, ad)
     }
   }
+  console.log('KILL', 'end parse')
   return (true)
 }
 
 var runParserAds = async () => {
+  var adsPromises = []
+  console.log('KILL', 'runParserAds')
+  
   for (let account of dataJson) {
     for (let adAccount of account.adAcs) {
       if (sync) {
         await parseAds(account, adAccount)
       } else {
-        parseAds(account, adAccount)
+        adsPromises.push(parseAds(account, adAccount))
       }
     }
   }
-  if (sync) {
-    setStatus('получили все рекламные объявления')
+
+  if (!sync) {
+    console.log('KILL', 'Promises start')
+    await Promise.all(adsPromises)
+    console.log('KILL', 'Promises end')
   }
+
+  setStatus('получили все рекламные объявления', new Error().lineNumber)
 }
 
 var generateTable = async () => {
-  setStatus('генерируем таблицу')
+  setStatus('генерируем таблицу', new Error().lineNumber)
   for (let account of dataJson) {
     if (account.adAcs.length == 0) {
       pushRow(account, null, null)
@@ -312,16 +330,21 @@ var generateTable = async () => {
 }
 
 var startParse = async () => {
-  await parseSocAccounts()
   if (sync) {
+    await parseSocAccounts()
     await runParserAdAccounts()
     await runParserAds()
     await generateTable()
-    setStatus('готово')
+    setStatus('готово', new Error().lineNumber)
+  } else {
+    await parseSocAccounts()
+    await runParserAds()
+    setStatus('готово', new Error().lineNumber)
   }
 }
 
 var pushNullRows = async () => {
+  console.log('KILL', 'pushNullRows')
   for (let account of dataJson) {
     if (account.adAcs.length == 0) {
       pushRow(account, null, null)
@@ -344,8 +367,8 @@ var clearAds = async () => {
 }
 
 var updateDate = async () => {
-  setStatus('обновление')
-  sync = true
+  setStatus('обновление', new Error().lineNumber)
+  //sync = true
   let dateTo = $('#dateTo')[0].value
   let dateFrom = $('#dateFrom')[0].value
   let date = (new Date())
@@ -362,7 +385,7 @@ var updateDate = async () => {
   ]
   //nSelectDate = dateFrom + '+-+' + dateTo
   /*if (nSelectDate == selectDate) {
-    setStatus('обновлено')
+    setStatus('обновлено', new Error().lineNumber)
   }*/
   //selectDate = nSelectDate
   await clearData()
@@ -373,7 +396,7 @@ var updateDate = async () => {
   } else {
     await pushNullRows()
   }
-  setStatus('обновлено')
+  setStatus('обновлено', new Error().lineNumber)
 }
 
 var showResultJson = () => {

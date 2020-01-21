@@ -21,6 +21,7 @@ var colors = {
 }
 
 var pushRow = (account, adAccount, ad) => {
+  console.log('PUSH', account.id, adAccount ? adAccount.id : 'none', ad ? ad.id : 'none')
   statuts = [account.status]
   if (adAccount) {
     statuts.splice(1, 0, adAccount.status)
@@ -157,6 +158,7 @@ var pushRow = (account, adAccount, ad) => {
 
 var clearData = async () => {
   resultRows = []
+  $('#log')[0].value = ''
   tableLength = 0
   $table = $('table')
   $.tablesorter.clearTableBody( $table[0] );
